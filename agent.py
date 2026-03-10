@@ -36,4 +36,3 @@ def random_move(self: MonteCarloChessAgent | RandomChessAgent, board:RawChessBoa
 		selected_move = choice(selected_piece_moves["moves"])	# Randomly selects a move from the selected piece's move choices
 		return selected_piece_moves["row"], selected_piece_moves["col"], selected_move[0], selected_move[-1]
 		#NB: selected_piece moves dict contains row & col (initial position of selected piece); selected_move is a tuple containing new row and new col (in that order)
-		
