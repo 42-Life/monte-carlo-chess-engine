@@ -24,14 +24,16 @@ class RandomChessAgent(object):
 		self.color = color
 
 	def get_next_move(self, board:RawChessBoard, is_init=False): #must return src_row, src_col, dest_row, dest_col
-		return random_move(self, board)
+		raw_board = board.uboard # get instance of RawChessBoard to work with
+		return random_move(self, raw_board)
 	
 
 # HELPER FUNCTIONS
 def random_move(self: MonteCarloChessAgent | RandomChessAgent, board:RawChessBoard):
 		# Random Chess Agent acts randomly -- random piece selection, random move selection from that piece's available moveset
 		# MCTS Agent does NOT act randomly, but needs random move selection if no captures or check-giving moves are available. Can use this function in that case.
-		all_available_moves = RawChessBoard.get_playable_moves(board, self.color)	# Gets all playable moves at given state of the board for the agent's color
+		
+		all_available_moves = board.get_playable_moves(self.color)	# Gets all playable moves at given state of the board for the agent's color
 		selected_piece_moves = choice(all_available_moves)		# Randomly selects a piece, as well as all its move choices
 		selected_move = choice(selected_piece_moves["moves"])	# Randomly selects a move from the selected piece's move choices
 		return selected_piece_moves["row"], selected_piece_moves["col"], selected_move[0], selected_move[-1]
