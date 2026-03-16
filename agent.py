@@ -5,6 +5,10 @@ import math
 
 import board
 
+#TODO: Use is_terminal, use game_status for terminal state checks in simulation stage; also use game_status for eval function at end of simulated game (instead of material count); also use game_status to determine winner in play_game function in main.py instead of material count
+#TODO: Use is_king_in_checkmate for terminal state checks in simulation stage; also use is_king_in_checkmate to determine winner in play_game function in main.py instead of material count
+#TODO: Also use move_piece
+
 class Node:
 	# Node class for MCTS tree
 	def __init__(self, board:RawChessBoard, color, parent=None, move=None):
@@ -16,37 +20,37 @@ class Node:
 		self.children = []
 		self.visits = 0
 		self.wins = 0
-		# self.remaining_moves = playout_policy(board) # List of all moves that can be made from this node's board state; used for expansion
 		self.remaining_moves = self.get_all_moves() # List of all moves that can be made from this node's board state; used for expansion
 
 
 	def get_all_moves(self):
-		# Captures > Check-giving moves > Random moves
-		all_available_moves = self.board.get_playable_moves(self.color)
+		return get_moves_MCTS(self.board, self.color)
+		# # Captures > Check-giving moves > Random moves
+		# all_available_moves = self.board.get_playable_moves(self.color)
 
-		# Initialisation of move arrays
-		capture_moves = []
-		check_moves = []
-		remaining_moves = []
-		opp_color = 'black' if self.color == 'white' else 'white' # gives_check takes opponent color
+		# # Initialisation of move arrays
+		# capture_moves = []
+		# check_moves = []
+		# remaining_moves = []
+		# opp_color = 'black' if self.color == 'white' else 'white' # gives_check takes opponent color
 
-		# Converts moves from dict into target usable format
-		for move in all_available_moves:
-			src_row, src_col = move["row"], move["col"]
+		# # Converts moves from dict into target usable format
+		# for move in all_available_moves:
+		# 	src_row, src_col = move["row"], move["col"]
 
-		# Evaluate possible moves from source coordinate
-		# Check for captures, then check for check-giving moves -> Update arrays
-			for dest_coordinates in move["moves"]:
-				dest_row, dest_col = dest_coordinates
-				if self.board.is_capture(src_row, src_col, dest_row, dest_col):
-					capture_moves.append((src_row, src_col, dest_row, dest_col)) # Filters capture moves
-				elif self.board.gives_check(src_row, src_col, dest_row, dest_col, opp_color):
-					check_moves.append((src_row, src_col, dest_row, dest_col))  # Filters check-giving moves
-				else:
-					remaining_moves.append((src_row, src_col, dest_row, dest_col)) # Remaining moves are stored for random gameplay in worst case of policy
+		# # Evaluate possible moves from source coordinate
+		# # Check for captures, then check for check-giving moves -> Update arrays
+		# 	for dest_coordinates in move["moves"]:
+		# 		dest_row, dest_col = dest_coordinates
+		# 		if self.board.is_capture(src_row, src_col, dest_row, dest_col):
+		# 			capture_moves.append((src_row, src_col, dest_row, dest_col)) # Filters capture moves
+		# 		elif self.board.gives_check(src_row, src_col, dest_row, dest_col, opp_color):
+		# 			check_moves.append((src_row, src_col, dest_row, dest_col))  # Filters check-giving moves
+		# 		else:
+		# 			remaining_moves.append((src_row, src_col, dest_row, dest_col)) # Remaining moves are stored for random gameplay in worst case of policy
 
-		return capture_moves + check_moves + remaining_moves 
-		# Moves are listed in priority order
+		# return capture_moves + check_moves + remaining_moves 
+		# # Moves are listed in priority order
 	
 
 	def is_fully_expanded(self):
@@ -73,14 +77,14 @@ class MonteCarloChessAgent(object):
 		
 
 	# MAIN STAGES MCTS
-	def select(self, node:Node):
+	def select(self, node:Node) -> Node :
 		# STAGE 1: SELECTION (pick best node to explore based on UCB score)
 		while node.is_fully_expanded() and len(node.children) > 0: # Want current node to be expanded, but children to exist to select from
 			node = node.choose_best_child() # Pick best child node to explore based on UCB score
 		return node
 			
 		
-	def expand(self, node:Node):
+	def expand(self, node:Node) -> Node :
 		board = node.board # Board state of current node
 		# STAGE 2: EXPANSION (expand node by adding child node corresponding to move selected from remaining moves)
 		if not node.remaining_moves:
@@ -88,16 +92,6 @@ class MonteCarloChessAgent(object):
 		
 		# Pick next move to expand from movelist (in priority order)
 		next_move = node.remaining_moves.pop(0) # Get next move to expand; remove mv from movelist
-		
-		# capture_moves, check_moves, remaining_moves = node.remaining_moves
-		# if capture_moves:
-		# 	next_move = capture_moves.pop(0) # Get next move to expand; remove mv from movelist
-		# elif check_moves:
-		# 	next_move = check_moves.pop(0) # Get next move to expand; remove mv from movelist
-		# else:
-		# 	next_move = choice(remaining_moves) # Random selection from non-priority movelist
-		# 	remaining_moves.remove(next_move) # Remove mv from movelist
-
 		src_row, src_col, dest_row, dest_col = next_move
 		
 		# Next state -- Type: 2D list
@@ -121,40 +115,70 @@ class MonteCarloChessAgent(object):
 		return child # Return child node (just expanded)
 
 
-	def simulate(board_arg:RawChessBoard, color):
-		pass
-		# To be implemented
-		# game_state = board_arg
-		# current = color
+	def simulate(self, board_arg:RawChessBoard, color) -> int:
+		# STAGE 3: SIMULATION (play out game from this child node using playout policy; return result of playout)
 
-		# for ply in range(board.MAX_NUM_PLY):		# Imposts max ply constant from board.py. This 'board' NOT to be confused with board attribute
-		# 	playable_moves = game_state.get_playable_moves(current) # Get playable moves for current color at this game state
-		# 	if len(playable_moves) == 0: # Game over
-		# 		break
+		# Copy of board so original board is not modified during simulation
+		# Uses deepcopy on the underlying board
+		state = RawChessBoard(
+			board=copy.deepcopy(board_arg.board),
+			number_of_total_moves=board_arg.number_of_total_moves,
+			game_status=board_arg.game_status
+		)
 
-		# 	valid_moves = get_valid_moves(playable_moves) # valid moves -- formatted as (sr,sc,dr,dc)
-		# 	if current == "white":
-		# 		move = choice(valid_moves)
-		# 	else:
-		# 		pass
+		current_player = color
 
-		# 	pass
+		for ply in range(board.MAX_NUM_PLY):
+			
+			if current_player == "white":
+				# White player: Random (unintelligent) play
+				move = random_move(self, state, current_player) # Random move selection for white player. Explicitly passes white as colour, since self (MCTS agent) is black
 
-		
+			else:
+				# Black player: Playout policy (intelligent)
+				move = smartest_move_MCTS(state, current_player)
 
-	def backpropagate(self):
-		# To be implemented
-		pass
+			# Break is game done (ie checkmate/stalemate)
+			if move is None: 	# None logic implemented in random_move (for white) and smartest_move_MCTS (for black)
+				break
+
+			# Simulate gameplay
+			next_state = state.get_state_after_move(move[0], move[1], move[2], move[3]) # Get new board state after making this move; will be used as board state for next iteration of simulation
+			# state.move_piece(current_player, move[0], move[1], move[2], move[3]) # Update state of board to reflect simulated move (ie make the move on the board)
+
+			state = RawChessBoard(
+				board=next_state,
+				number_of_total_moves=state.number_of_total_moves + 1,	# increment steps for simulation game
+				game_status=state.game_status
+			)
+
+			# Players change turns
+			current_player = 'black' if current_player == 'white' else 'white'
+
+		# Eval function @ end of (simulated) game
+		if current_player != self.color: # Game ends on opponent's turn (ie player forced checkmate/stalemate ie win)
+			return 1 
+		else:  
+			return 0 
+
+
+	def backpropagate(self, node:Node, result:int):
+		# STAGE 4: BACKPROPAGATION (update win/visit counts along path from child to root based on result of simulation playout)
+		while node is not None:		# Terminates after root case (root.parent = None)
+			node.visits += 1
+			node.wins += result
+			node = node.parent 		# Upwards traversal until root
+
 
 	def get_next_move(self, gameboard:RawChessBoard): #must return src_row, src_col, dest_row, dest_col
 		root = Node(gameboard, color=self.color) # Create root node for MCTS tree with current board state and agent's color
 		for _ in range(100):
-			leaf = self.select(root)
-			child = self.expand(leaf, gameboard)
+			leaf:Node = self.select(root)
+			child:Node = self.expand(leaf)
 			result = self.simulate(child.board, child.color)
 			self.backpropagate(child, result)
 		
-		best_child = max(root.children, key=lambda c: c.visits) # Picks child with most visits -- ie best child
+		best_child:Node = max(root.children, key=lambda c: c.visits) # Picks child with most visits -- ie best child
 		return best_child.move # Return move corresponding to best child
 		
 
@@ -164,21 +188,22 @@ class RandomChessAgent(object):
 
 	# Main logic for MCTS agent
 	def get_next_move(self, board:RawChessBoard, is_init=False): #must return src_row, src_col, dest_row, dest_col
-		return random_move(self, board) # Random move selection for random chess agent; also used for MCTS agent if no captures or check-giving moves are available
+		return random_move(self, board, self.color) # Random move selection for random chess agent; also used for MCTS agent if no captures or check-giving moves are available
 	
 
 # HELPER FUNCTIONS
-def random_move(self: MonteCarloChessAgent | RandomChessAgent, board:RawChessBoard):
+def random_move(agent: MonteCarloChessAgent | RandomChessAgent, board:RawChessBoard, color):
 	# Random Chess Agent acts randomly -- random piece selection, random move selection from that piece's available moveset
 	# MCTS Agent does NOT act randomly, but needs random move selection if no captures or check-giving moves are available. Can use this function in that case.
 	
-	all_available_moves = board.uboard.get_playable_moves(self.color)	# Gets all playable moves at given state of the board for the agent's color
+	all_available_moves = board.get_playable_moves(color)	# Gets all playable moves at given state of the board for the agent's color
 
 	# Account for cases where moves are not possible (avoid IndexError from choice() function)
 	# Filters invalid moves
 	valid_moves = [mv for mv in all_available_moves if len(mv["moves"]) > 0]
 	if len(valid_moves) == 0:
-		raise Exception("No valid moves available for agent of color {0}".format(self.color))
+		# raise Exception("No valid moves available for agent of color {0}".format(self.color))
+		return None 	# No plays available
 
 	# Random selection of moves
 	selected_piece_moves = choice(valid_moves)		# Randomly selects a piece, as well as all its move choices
@@ -186,14 +211,53 @@ def random_move(self: MonteCarloChessAgent | RandomChessAgent, board:RawChessBoa
 	return selected_piece_moves["row"], selected_piece_moves["col"], selected_move[0], selected_move[1]
 	#NB: selected_piece moves dict contains row & col (initial position of selected piece); selected_move is a tuple containing new row and new col (in that order)
 
+
 def get_UCB(node:Node, c=1.41):
-	if node.visits == 0 | node.parent is None: # Unvisited & root node cases
+	if node.visits == 0 or node.parent is None: # Unvisited & root node cases
 		return float('inf')  # Return positive infinity; forces exploration of unvisited nodes
 	
 	# UCB Formula
 	exploit = node.wins / node.visits
 	explore = c * math.sqrt(math.log(node.parent.visits) / node.visits)
 	return exploit + explore
+
+
+def get_moves_MCTS(board:RawChessBoard, color):
+	# Captures > Check-giving moves > Random moves
+	all_available_moves = board.get_playable_moves(color)
+
+	# Initialisation of move arrays
+	capture_moves = []
+	check_moves = []
+	remaining_moves = []
+	opp_color = 'black' if color == 'white' else 'white' # gives_check takes opponent color
+
+	# Converts moves from dict into target usable format
+	for move in all_available_moves:
+		src_row, src_col = move["row"], move["col"]
+
+	# Evaluate possible moves from source coordinate
+	# Check for captures, then check for check-giving moves -> Update arrays
+		for dest_coordinates in move["moves"]:
+			dest_row, dest_col = dest_coordinates
+			if board.is_capture(src_row, src_col, dest_row, dest_col):
+				capture_moves.append((src_row, src_col, dest_row, dest_col)) # Filters capture moves
+			elif board.gives_check(src_row, src_col, dest_row, dest_col, opp_color):
+				check_moves.append((src_row, src_col, dest_row, dest_col))  # Filters check-giving moves
+			else:
+				remaining_moves.append((src_row, src_col, dest_row, dest_col)) # Remaining moves are stored for random gameplay in worst case of policy
+
+	return capture_moves + check_moves + remaining_moves 
+	# Moves are listed in priority order
+
+
+def smartest_move_MCTS(board:RawChessBoard, color):
+	moves = get_moves_MCTS(board, color) # Get moves in priority order for black player
+	if len(moves) == 0:
+		return None # Game over case (checkmate/stalemate for MCTS agent)
+	
+	best_move = moves[0] # Select best move based on playout policy logic (since moves are in priority order, best move is first move in list)
+	return best_move # , moves # Best move returned + remaining moves returned
 
 
 
@@ -277,3 +341,31 @@ def get_UCB(node:Node, c=1.41):
 	# 	else:
 	# 		return random_move(self, board)
 	# 		#NB: random_move will not return a capture or check-giving move, since these moves would have been checked for at this stage
+
+			# self.remaining_moves = playout_policy(board) # List of all moves that can be made from this node's board state; used for expansion
+
+	# game_state = board_arg
+	# current = color
+
+	# for ply in range(board.MAX_NUM_PLY):		# Imposts max ply constant from board.py. This 'board' NOT to be confused with board attribute
+	# 	playable_moves = game_state.get_playable_moves(current) # Get playable moves for current color at this game state
+	# 	if len(playable_moves) == 0: # Game over
+	# 		break
+
+	# 	valid_moves = get_valid_moves(playable_moves) # valid moves -- formatted as (sr,sc,dr,dc)
+	# 	if current == "white":
+	# 		move = choice(valid_moves)
+	# 	else:
+	# 		pass
+
+	# 	pass
+
+	# within expand
+		# capture_moves, check_moves, remaining_moves = node.remaining_moves
+		# if capture_moves:
+		# 	next_move = capture_moves.pop(0) # Get next move to expand; remove mv from movelist
+		# elif check_moves:
+		# 	next_move = check_moves.pop(0) # Get next move to expand; remove mv from movelist
+		# else:
+		# 	next_move = choice(remaining_moves) # Random selection from non-priority movelist
+		# 	remaining_moves.remove(next_move) # Remove mv from movelist
