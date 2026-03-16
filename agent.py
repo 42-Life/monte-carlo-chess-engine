@@ -5,9 +5,7 @@ import math
 
 import board
 
-#TODO: Use is_terminal, use game_status for terminal state checks in simulation stage; also use game_status for eval function at end of simulated game (instead of material count); also use game_status to determine winner in play_game function in main.py instead of material count
-#TODO: Use is_king_in_checkmate for terminal state checks in simulation stage; also use is_king_in_checkmate to determine winner in play_game function in main.py instead of material count
-#TODO: Also use move_piece
+#TODO: Optimise/abide by chess rules: White does not move king when in check. Chess rules dictate that a player in check MUST move out of check, so long as a move exists to exit check (ie: not a checkmate case)
 
 class Node:
 	# Node class for MCTS tree
@@ -95,7 +93,7 @@ class MonteCarloChessAgent(object):
 		src_row, src_col, dest_row, dest_col = next_move
 		
 		# Next state -- Type: 2D list
-		new_board_state = board.get_state_after_move(src_row, src_col, dest_row, dest_col) # Get new board state after making this move; will be used as board state for child node
+		new_board_state = board.get_state_after_move(node.color, src_row, src_col, dest_row, dest_col) # Get new board state after making this move; will be used as board state for child node
 
 		# Expand new child
 		child_board = RawChessBoard(
@@ -120,46 +118,54 @@ class MonteCarloChessAgent(object):
 
 		# Copy of board so original board is not modified during simulation
 		# Uses deepcopy on the underlying board
-		state = RawChessBoard(
-			board=copy.deepcopy(board_arg.board),
-			number_of_total_moves=board_arg.number_of_total_moves,
-			game_status=board_arg.game_status
-		)
+		simulation_board = copy.deepcopy(board_arg)
+
+		# state = RawChessBoard(
+		# 	board=copy.deepcopy(board_arg.board),
+		# 	number_of_total_moves=board_arg.number_of_total_moves,
+		# 	game_status=board_arg.game_status
+		# )
 
 		current_player = color
 
 		for ply in range(board.MAX_NUM_PLY):
+
+			# Break is game is already done
+			if simulation_board.is_terminal(current_player) or simulation_board.is_king_in_checkmate(current_player):
+				break
 			
 			if current_player == "white":
 				# White player: Random (unintelligent) play
-				move = random_move(self, state, current_player) # Random move selection for white player. Explicitly passes white as colour, since self (MCTS agent) is black
+				move = random_move(self, simulation_board, current_player) # Random move selection for white player. Explicitly passes white as colour, since self (MCTS agent) is black
 
 			else:
 				# Black player: Playout policy (intelligent)
-				move = smartest_move_MCTS(state, current_player)
+				move = smartest_move_MCTS(simulation_board, current_player)
 
-			# Break is game done (ie checkmate/stalemate)
+			# Break if no moves available for current player (ie checkmate/stalemate)
 			if move is None: 	# None logic implemented in random_move (for white) and smartest_move_MCTS (for black)
 				break
 
 			# Simulate gameplay
-			next_state = state.get_state_after_move(move[0], move[1], move[2], move[3]) # Get new board state after making this move; will be used as board state for next iteration of simulation
-			# state.move_piece(current_player, move[0], move[1], move[2], move[3]) # Update state of board to reflect simulated move (ie make the move on the board)
-
-			state = RawChessBoard(
-				board=next_state,
-				number_of_total_moves=state.number_of_total_moves + 1,	# increment steps for simulation game
-				game_status=state.game_status
-			)
+			# next_state = state.get_state_after_move(move[0], move[1], move[2], move[3]) # Get new board state after making this move; will be used as board state for next iteration of simulation
+			simulation_board.move_piece(current_player, move[0], move[1], move[2], move[3]) # Update state of board to reflect simulated move (ie make the move on the board)
+			# print("LINE 152: Simulation move made: player was", current_player, ". move was", move)
 
 			# Players change turns
 			current_player = 'black' if current_player == 'white' else 'white'
 
 		# Eval function @ end of (simulated) game
-		if current_player != self.color: # Game ends on opponent's turn (ie player forced checkmate/stalemate ie win)
-			return 1 
-		else:  
-			return 0 
+		if simulation_board.is_king_in_checkmate(self.opponent): # If opponent is in checkmate, this is a win for the MCTS agent
+			return 1
+		elif simulation_board.is_king_in_checkmate(self.color): # If MCTS agent is in checkmate, this is a loss for the MCTS agent
+			return 0
+		else:
+			return 0 	# Should only occur if max ply is exceeded before checkmate
+
+		# if current_player != self.color: # Game ends on opponent's turn (ie player forced checkmate/stalemate ie win)
+		# 	return 1 
+		# else:  
+		# 	return 0 
 
 
 	def backpropagate(self, node:Node, result:int):
@@ -170,8 +176,9 @@ class MonteCarloChessAgent(object):
 			node = node.parent 		# Upwards traversal until root
 
 
-	def get_next_move(self, gameboard:RawChessBoard): #must return src_row, src_col, dest_row, dest_col
-		root = Node(gameboard, color=self.color) # Create root node for MCTS tree with current board state and agent's color
+	def get_next_move(self, gameboard:ChessBoardGUI): #must return src_row, src_col, dest_row, dest_col
+		root = Node(copy.deepcopy(gameboard.uboard), color=self.color) # Create root node for MCTS tree with current board state and agent's color
+		# Deepcopy to avoid manipulating actual game board during MCTS; once next_move is returned, THEN real gameboard updated in main.py
 		for _ in range(100):
 			leaf:Node = self.select(root)
 			child:Node = self.expand(leaf)
@@ -179,16 +186,17 @@ class MonteCarloChessAgent(object):
 			self.backpropagate(child, result)
 		
 		best_child:Node = max(root.children, key=lambda c: c.visits) # Picks child with most visits -- ie best child
+		print("LINE 188: best_child move is", best_child.move, "with", best_child.visits, "visits and", best_child.wins, "wins")
 		return best_child.move # Return move corresponding to best child
-		
+		# return random_move(self, gameboard.uboard, self.color) # TESTING ONLY. COMMENT ABOVE, COMMENT HERE AS NEEDED
 
 class RandomChessAgent(object):
 	def __init__(self, color):
 		self.color = color
 
 	# Main logic for MCTS agent
-	def get_next_move(self, board:RawChessBoard, is_init=False): #must return src_row, src_col, dest_row, dest_col
-		return random_move(self, board, self.color) # Random move selection for random chess agent; also used for MCTS agent if no captures or check-giving moves are available
+	def get_next_move(self, gameboard:ChessBoardGUI, is_init=False): #must return src_row, src_col, dest_row, dest_col
+		return random_move(self, gameboard.uboard, self.color) # Random move selection for random chess agent; also used for MCTS agent if no captures or check-giving moves are available
 	
 
 # HELPER FUNCTIONS
@@ -254,9 +262,11 @@ def get_moves_MCTS(board:RawChessBoard, color):
 def smartest_move_MCTS(board:RawChessBoard, color):
 	moves = get_moves_MCTS(board, color) # Get moves in priority order for black player
 	if len(moves) == 0:
+		print("LINE262; No valid moves available for MCTS agent of color {0}".format(color))
 		return None # Game over case (checkmate/stalemate for MCTS agent)
 	
 	best_move = moves[0] # Select best move based on playout policy logic (since moves are in priority order, best move is first move in list)
+	# print("LINE 266: best_move is", best_move)
 	return best_move # , moves # Best move returned + remaining moves returned
 
 
