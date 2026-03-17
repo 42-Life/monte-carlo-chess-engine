@@ -36,6 +36,18 @@ import board
 # HOWEVER, random board reset BUG when white king is in check remains a major problem
 	# In one game, the white king disappears, but gameplay continues
 
+# TODO Fix: evade check -- method within random that filters all actions available, only considering check-evading moves
+# If one cannot be played, then terminal state is reached and opponent wins
+
+""" Mar 17: 
+	Still randomises move after white check, even with evade_check implemented
+	Analysis -- seems to play 3 moves when in check? But sometimes king disappears
+
+	NEED to implement rules
+	* White cannot move into check
+	* Pawns can be check-giving pieces (game does not recognise pawn as check-giving threats -- both for MCTS move choice & randomAgent check-evasion)
+"""
+
 
 class Node:
 	# Node class for MCTS tree
@@ -233,9 +245,40 @@ class RandomChessAgent(object):
 	def __init__(self, color):
 		self.color = color
 
+
+	def evade_check(self, gameboard:RawChessBoard):
+		""" To abide by the rules of chess, the white agent pauses entirely random movement and forces a move that evades check
+		 	If this is impossible, then checkmate and game is done. Written partly to deal with bug where game board 'resets' semirandomly when white is in check
+			Only called once board is in check
+		"""
+		check_evasion_moves = []
+
+		all_moves = gameboard.get_playable_moves(self.color)
+		usable_moves = convert_moves_format(all_moves)
+
+		# Find valid check evasion moves
+		for move in usable_moves:
+			next_state = gameboard.is_check(self.color)
+			if not gameboard.is_check(self.color):
+				check_evasion_moves.append(move)
+
+		#TODO: If empty with no move, checkmate ie terminal state
+		if len(check_evasion_moves) == 0:
+			return None			# checkmate state
+		else:
+			return choice(check_evasion_moves)		# random selection from valid moveset
+
+
 	# Main logic for MCTS agent
 	def get_next_move(self, gameboard:ChessBoardGUI, is_init=False): #must return src_row, src_col, dest_row, dest_col
-		
+
+		underlying_board:RawChessBoard = gameboard.uboard
+		if underlying_board.is_check(self.color):
+			move = self.evade_check(underlying_board)
+			if move == None or underlying_board.is_king_in_checkmate(self.color):
+				print("LINE 270: No move available for  white")
+				return None
+
 		return random_move(self, gameboard.uboard, self.color) # Random move selection for random chess agent; also used for MCTS agent if no captures or check-giving moves are available
 	
 
@@ -314,3 +357,16 @@ def smartest_move_MCTS(board:RawChessBoard, color):
 		return None
 	
 	return best_move
+
+
+def convert_moves_format(moves:list, isRandom:bool) -> list:
+	usable_moves = []
+
+	for move in moves:
+		src_row, src_col = move["row"], move["col"]
+
+	if isRandom:
+		for dest_row, dest_col in move["moves"]:
+			usable_moves.append((src_row, src_col, dest_row, dest_col))
+	
+	return usable_moves
