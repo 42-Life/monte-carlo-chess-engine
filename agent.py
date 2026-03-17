@@ -4,9 +4,6 @@ import copy
 import math
 import board
 
-# TODO: Implement check avoidance in random move
-# TODO: Optionally shuffle moves in get_moves_MCTS to avoid same moves playing out, import shuffle from random
-
 
 # ----------------- NODE CLASS ---------------
 class Node:
@@ -22,8 +19,9 @@ class Node:
 		self.visits = 0
 		self.wins = 0
 		
-		capture_moves, check_moves, other_moves = get_moves_MCTS(self.board, self.color)
+		capture_moves, check_moves, other_moves = get_moves_MCTS(self.board, self.color)	# calls helper to get available moves to node
 		self.remaining_moves = capture_moves + check_moves + other_moves
+
 
 	def is_fully_expanded(self):
 		""" Checks if node is fully expanded (ie, all moves have been considered)
@@ -55,14 +53,16 @@ class MonteCarloChessAgent(object):
 
 
 	def select(self, node:Node) -> Node :
-		""" STAGE 1 of MCTS """
+		""" STAGE 1 of MCTS: Pick a new best child for expansion.
+			Selection made using UCB (housed within choose_best_child helper)
+		"""
 		while node.is_fully_expanded() and len(node.children) > 0: # Want current node to be expanded, but children to exist to select from
 			node = node.choose_best_child() # Pick best child node to explore based on UCB score
 		return node
 
 
 	def expand(self, node:Node) -> Node :
-		""" STAGE 2 of MCTS
+		""" STAGE 2 of MCTS: Expand children from selected node
 		"""
 		# Initialise key variables
 		gameboard = node.board
@@ -97,7 +97,9 @@ class MonteCarloChessAgent(object):
 
 
 	def simulate(self, board_arg:RawChessBoard, color) -> int:
-		""" STAGE 3 of MCTS
+		""" STAGE 3 of MCTS: Simulate rollout based on playout policy
+			Black: intelligent: capture > check > other -- with exploration/exploitation tradeoff
+			White: Chooses randomly, but cannot make illegal moves
 		"""
 		simulation_board = copy.deepcopy(board_arg)
 		current_player = color
@@ -135,7 +137,7 @@ class MonteCarloChessAgent(object):
 
 
 	def backpropagate(self, node:Node, result):
-		""" STAGE 4 of MCTS
+		""" STAGE 4 of MCTS: Propagate updated win and visit counts from leaf node up to root
 		"""
 		while node:
 			node.visits += 1
@@ -144,7 +146,7 @@ class MonteCarloChessAgent(object):
 
 
 	def get_next_move(self, gameboard:ChessBoardGUI): #must return src_row, src_col, dest_row, dest_col
-		""" Skeleton putting togeter all four stages of MCTS
+		""" Skeleton putting together all four stages of MCTS
 		"""
 		root = Node(board=copy.deepcopy(gameboard.uboard), color=self.color)        # Deepcopy to avoid manipulating board when unintended
 		
@@ -179,27 +181,30 @@ class RandomChessAgent(object):
 
 # ----------------- HELPER FUNCTIONS ---------------
 def random_move(board:RawChessBoard, color):
-	""" Function checks all possible moves, filters legal moves, and then picks a move at random
-        Used for unintelligent random agent
+	""" Function checks all possible moves, filters for legal moves, and then picks a move at random
+        Used for unintelligent random agent. Implemented for O(n)
 	"""
 	all_available_moves = board.get_playable_moves(color)	# Gets all playable moves at given state of the board for the agent's color
-	legal_moves = []
 
-	for move in all_available_moves:
-		# print(move)
-		src_row, src_col = move["row"], move["col"]
+	while all_available_moves:
+		move = choice(all_available_moves)				# Random piece seletion
+		src_row, src_col = move["row"], move["col"]		# Get source coordinates of pc
+		
+		movelist:list = move["moves"]
+		if movelist:
+			dest_row, dest_col = choice(movelist)
+		else:
+			all_available_moves.remove(move)		# If no legal moves available for piece, remove and reiterate
+			continue
 
-		for dest_row, dest_col in move["moves"]:
-			if len(move["moves"]) == 0 or is_illegal_move(board, color, src_row, src_col, dest_row, dest_col):
-				continue
+		if not is_illegal_move(board, color, src_row, src_col, dest_row, dest_col):
+			return (src_row, src_col, dest_row, dest_col)	# Pick legal move
+		else:
+			movelist.remove((dest_row, dest_col))		# Remove illegal destination coordinates
+			if len(movelist) == 0:
+				all_available_moves.remove(move)		# Same remove and reiterate, only if removing illegal coordinates cause movelist to become empty at this point
 
-		if not len(move["moves"]) == 0:
-			legal_moves.append((src_row, src_col, dest_row, dest_col))
-
-	if not legal_moves:
-		return None		# no legal moves ie game over (checkmate/stalemate)
-	
-	return choice(legal_moves)		# return randomly selected legal move
+	return None 		# if NO legal moves at all
 
 
 def get_UCB(node:Node, c=1.14):
@@ -215,7 +220,7 @@ def get_UCB(node:Node, c=1.14):
 
 
 def get_moves_MCTS(board:RawChessBoard, color):
-	""" Gets available, legal moves for MCTS
+	""" Gets available, legal moves for MCTS Agent (black player)
 	"""
 	# Captures > Check-giving moves > Random moves
 	all_available_moves = board.get_playable_moves(color)
@@ -234,11 +239,11 @@ def get_moves_MCTS(board:RawChessBoard, color):
 	# Check for captures, then check for check-giving moves -> Update arrays
 		for dest_coordinates in move["moves"]:
 			dest_row, dest_col = dest_coordinates
-			
+
 			if board.is_capture(src_row, src_col, dest_row, dest_col):
-				capture_moves.append((src_row, src_col, dest_row, dest_col)) # Filters capture moves
+				capture_moves.append((src_row, src_col, dest_row, dest_col)) # Filters for capture moves
 			elif board.gives_check(src_row, src_col, dest_row, dest_col, opp_color):
-				check_moves.append((src_row, src_col, dest_row, dest_col))  # Filters check-giving moves
+				check_moves.append((src_row, src_col, dest_row, dest_col))  # Filters for check-giving moves
 			else:
 				remaining_moves.append((src_row, src_col, dest_row, dest_col)) # Remaining moves are stored for random gameplay in worst case of policy
 
@@ -334,5 +339,24 @@ def get_moves_MCTS(board:RawChessBoard, color):
 
 	# print("Num of legal moves:", len(legal_moves))
 	return capture_moves, check_moves, remaining_moves 
+
+		# all_available_moves = board.get_playable_moves(color)	# Gets all playable moves at given state of the board for the agent's color
+	# legal_moves = []
+
+	# for move in all_available_moves:
+	# 	# print(move)
+	# 	src_row, src_col = move["row"], move["col"]
+
+	# 	for dest_row, dest_col in move["moves"]:
+	# 		if len(move["moves"]) == 0 or is_illegal_move(board, color, src_row, src_col, dest_row, dest_col):
+	# 			continue
+
+	# 	if not len(move["moves"]) == 0:
+	# 		legal_moves.append((src_row, src_col, dest_row, dest_col))
+
+	# if not legal_moves:
+	# 	return None		# no legal moves ie game over (checkmate/stalemate)
+	
+	# return choice(legal_moves)		# return randomly selected legal move
 
 """
