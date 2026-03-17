@@ -247,7 +247,7 @@ class RawChessBoard:
 		piece = self.board[row][col]
 		
 		direction = -1 if piece.islower() else 1
-		start_row = 1 if piece.islower() else 6
+		start_row = 6 if piece.islower() else 1
 		
 		#Forward move
 		nr, nc = row + direction, col
@@ -272,7 +272,7 @@ class RawChessBoard:
 		return moves
 
 	def is_pos_same_color(self, value1, value2):
-		return (value1.islower() and value2.islower()) or (value1.islower() and value2.islower())
+		return (value1.islower() and value2.islower()) or (value1.isupper() and value2.isupper())
 
 	def get_playable_moves(self, color):
 		played_moves = []
