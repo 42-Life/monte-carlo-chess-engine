@@ -183,23 +183,23 @@ def random_move(board:RawChessBoard, color):
         Used for unintelligent random agent
 	"""
 	all_available_moves = board.get_playable_moves(color)	# Gets all playable moves at given state of the board for the agent's color
+	legal_moves = []
+
+	for move in all_available_moves:
+		# print(move)
+		src_row, src_col = move["row"], move["col"]
+
+		for dest_row, dest_col in move["moves"]:
+			if len(move["moves"]) == 0 or is_illegal_move(board, color, src_row, src_col, dest_row, dest_col):
+				continue
+
+		if not len(move["moves"]) == 0:
+			legal_moves.append((src_row, src_col, dest_row, dest_col))
+
+	if not legal_moves:
+		return None		# no legal moves ie game over (checkmate/stalemate)
 	
-	valid_moves = [mv for mv in all_available_moves if len(mv["moves"]) > 0]
-	if len(valid_moves) == 0:
-		# raise Exception("No valid moves available for agent of color {0}".format(self.color))
-		return None 	# No plays available
-	
-    # Random selection of moves
-	selected_piece_moves = choice(valid_moves)		# Randomly selects a piece, as well as all its move choices
-	
-	# while True:
-	selected_move = choice(selected_piece_moves["moves"])	# Randomly selects a move from the selected piece's move choices
-	src_row, src_col, dest_row, dest_col = selected_piece_moves["row"], selected_piece_moves["col"], selected_move[0], selected_move[1]
-		# if not is_illegal_move(board, color, src_row, src_col, dest_row, dest_col):
-			# break
-	
-	return selected_piece_moves["row"], selected_piece_moves["col"], selected_move[0], selected_move[1] # Move must be legal atp
-	#NB: selected_piece moves dict contains row & col (initial position of selected piece); selected_move is a tuple containing new row and new col (in that order)
+	return choice(legal_moves)		# return randomly selected legal move
 
 
 def get_UCB(node:Node, c=1.14):
@@ -234,9 +234,7 @@ def get_moves_MCTS(board:RawChessBoard, color):
 	# Check for captures, then check for check-giving moves -> Update arrays
 		for dest_coordinates in move["moves"]:
 			dest_row, dest_col = dest_coordinates
-
-			# if not is_illegal_move(board, color, src_row, src_col, dest_row, dest_col):
-				# If move is illegal, it is skipped -- not added to any of the move lists
+			
 			if board.is_capture(src_row, src_col, dest_row, dest_col):
 				capture_moves.append((src_row, src_col, dest_row, dest_col)) # Filters capture moves
 			elif board.gives_check(src_row, src_col, dest_row, dest_col, opp_color):
@@ -250,13 +248,91 @@ def get_moves_MCTS(board:RawChessBoard, color):
 def is_illegal_move(board:RawChessBoard, color, src_row, src_col, dest_row, dest_col):
 	""" Checks if this move would put the player in check, by looking a step ahead
 	"""
-	next_state = board.get_state_after_move(color, src_row, src_col, dest_row, dest_col)
+	new_board = copy.deepcopy(board)
+	next_state = new_board.get_state_after_move(color, src_row, src_col, dest_row, dest_col)
+
+	if next_state is None:
+		return True			# invalid move
+
 	temp_board = RawChessBoard(
-		board=copy.deepcopy(next_state),
-		number_of_total_moves=board.number_of_total_moves,
-		game_status=board.game_status
+		board=next_state,
+		number_of_total_moves=new_board.number_of_total_moves + 1,
+		game_status=new_board.game_status
 	)
 
-	if temp_board.is_check(color):
-		return True
-	return False
+	return temp_board.is_check(color)
+
+
+
+# CODE GRAVE
+			# # One step simulation for is_check check
+			# next_state = board.get_state_after_move(color, src_row, src_col, dest_row, dest_col)
+			# sim_board = RawChessBoard(
+			# 	board=copy.deepcopy(next_state),
+			# 	number_of_total_moves=board.number_of_total_moves,
+			# 	game_status=board.game_status
+			# )
+
+			# # Skip move if it causes check
+			# # If move is illegal, it is skipped -- not added to any of the move lists
+			# if sim_board.is_check(color):
+
+	"""
+	valid_moves = [mv for mv in all_available_moves if len(mv["moves"]) > 0]
+	if len(valid_moves) == 0:
+		# raise Exception("No valid moves available for agent of color {0}".format(self.color))
+		return None 	# No plays available
+	
+    # Random selection of moves
+	selected_piece_moves = choice(valid_moves)		# Randomly selects a piece, as well as all its move choices
+	selected_move = choice(selected_piece_moves["moves"])	# Randomly selects a move from the selected piece's move choices
+	
+	return selected_piece_moves["row"], selected_piece_moves["col"], selected_move[0], selected_move[1] # Move must be legal atp
+	#NB: selected_piece moves dict contains row & col (initial position of selected piece); selected_move is a tuple containing new row and new col (in that order)
+	"""
+
+				# if not len(move["moves"]) == 0:
+				# legal_moves.append((src_row, src_col, dest_row, dest_col))
+
+		# Filter through legal moves only now
+		# for move in legal_moves:
+			# src_row, src_col, dest_row, dest_col = move
+
+"""
+
+def get_moves_MCTS(board:RawChessBoard, color):
+	# Initialisation of move arrays
+	capture_moves = []
+	check_moves = []
+	remaining_moves = []
+	opp_color = 'black' if color == 'white' else 'white' # gives_check takes opponent color
+
+	# Captures > Check-giving moves > Random moves
+	all_available_moves = board.get_playable_moves(color)
+
+	# Converts moves from dict into target usable format
+	for move in all_available_moves:
+		src_row, src_col = move["row"], move["col"]
+		# legal_moves = []
+
+	# Evaluate possible moves from source coordinate
+	# Check for captures, then check for check-giving moves -> Update arrays
+		for dest_row, dest_col in move["moves"]:
+
+			if is_illegal_move(board, color, src_row, src_col, dest_row, dest_col):
+				print("continuing")
+				continue
+
+			if board.is_capture(src_row, src_col, dest_row, dest_col):
+				capture_moves.append((src_row, src_col, dest_row, dest_col)) # Filters capture moves
+			elif board.gives_check(src_row, src_col, dest_row, dest_col, opp_color):
+				check_moves.append((src_row, src_col, dest_row, dest_col))  # Filters check-giving moves
+			else:
+				remaining_moves.append((src_row, src_col, dest_row, dest_col)) # Remaining moves are stored for random gameplay in worst case of policy
+			
+			print(len(capture_moves), len(check_moves), len(remaining_moves))
+
+	# print("Num of legal moves:", len(legal_moves))
+	return capture_moves, check_moves, remaining_moves 
+
+"""
